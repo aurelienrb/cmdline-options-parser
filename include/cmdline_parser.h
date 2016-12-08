@@ -58,6 +58,7 @@ namespace cmdline {
 
         ProgramOption() {}
         ProgramOption(std::string optName, std::string optDescr, std::string optDefVal = "") : name(optName), description(optDescr), defaultValue(optDefVal) {
+            assert(optDescr.back() != '.');
             if (name == "help") {
                 assert(optDefVal.empty());
                 description = "print this help message";
@@ -75,12 +76,13 @@ namespace cmdline {
             }
         }
         ProgramOption(std::initializer_list<std::string> optFlags, std::string optDescr, std::string optDefVal = "") : description(optDescr), defaultValue(optDefVal) {
+            assert(optDescr.back() != '.');
             for (const auto & f : optFlags) {
                 if (f.front() == '-') {
                     flags.push_back(f);
                 }
                 else {
-                    assert(!name.empty());
+                    assert(name.empty());
                     name = f;
                 }
             }
@@ -129,7 +131,7 @@ namespace cmdline {
             }
 
             if (!aboutMsg.empty()) {
-                std::cout << aboutMsg << "\n";
+                std::cout << aboutMsg << ".\n";
             }
 
             std::cout << "\n";
@@ -188,7 +190,7 @@ namespace cmdline {
             std::cout << "\n";
 
             if (!aboutMsg.empty()) {
-                std::cout << aboutMsg << "\n";
+                std::cout << aboutMsg << ".\n";
                 std::cout << "\n";
             }
 
@@ -212,7 +214,8 @@ namespace cmdline {
         }
 
         inline void setValue(std::map<std::string, std::string> & result, const ProgramOption & opt, const std::string & value) {
-
+            assert(result[opt.name].empty());
+            result[opt.name] = value;
         }
     }
 
@@ -227,11 +230,11 @@ namespace cmdline {
             for (auto name : opt.flags) {
                 assert(allFlags.count(name) == 0);
                 allFlags[name] = opt;
-                if (name.front() != '-' && name != "help" && name != "version") {
-                    assert(positionalOption.name.empty()); // only 1 positional option
-                    positionalOption = opt;
-                }
                 result[name] = opt.defaultValue;
+            }
+            if (!opt.name.empty() && opt.flags.empty() && opt.name != "help" && opt.name != "version") {
+                assert(positionalOption.name.empty()); // only 1 positional option
+                positionalOption = opt;
             }
         }
 
@@ -249,7 +252,7 @@ namespace cmdline {
                         std::exit(0);
                     }
                     else if (opt.name == "version") {
-                        std::cout << opt.description << std::endl;
+                        std::cout << opt.defaultValue << std::endl;
                         std::exit(0);
                     }
                     // process named options
@@ -257,7 +260,7 @@ namespace cmdline {
                         // we expect a value for named options
                         ++i;
                         if (i == argc || argv[i][0] == '-') {
-                            std::cerr << "Missing value for option '" << opt.name << "'.\n";
+                            std::cerr << "Error: missing value for option '" << arg << "' (" << opt.description << ").\n";
                             std::exit(1);
                         }
                         priv::setValue(result, opt, argv[i]);
@@ -268,7 +271,7 @@ namespace cmdline {
                     }
                 }
                 else {
-                    std::cerr << "Unknown option '" << arg << "'" << std::endl;
+                    std::cerr << "Error: unknown option '" << arg << "'" << std::endl;
                     priv::displayHelpMessage(argv[0], options);
                     std::exit(1);
                 }
@@ -279,10 +282,18 @@ namespace cmdline {
                 positionalOption = ProgramOption{};
             }
             else {
-                std::cerr << "Unexpected value '" << arg << "'." << std::endl;
+                std::cerr << "Error: unexpected value '" << arg << "'." << std::endl;
                 priv::displayHelpMessage(argv[0], options);
                 std::exit(1);
             }
+        }
+
+        // checking that positionnal arg is set
+        if (!positionalOption.name.empty()) {
+            assert(result[positionalOption.name].empty());
+            std::cerr << "Error: missing '" << positionalOption.name << "' value (" << positionalOption.description << ").\n";
+            priv::displayHelpMessage(argv[0], options);
+            std::exit(1);
         }
 
         return result;
